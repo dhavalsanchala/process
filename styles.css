@@ -2390,3 +2390,78 @@ body[data-layout-mode="mobile"] .run-step-check { width: 28px; height: 28px; }
   
   /* Context menu hidden on mobile — action sheet is used instead */
 body[data-layout-mode="mobile"] .context-menu { display: none !important; }
+
+
+/* =========================================================
+   MOBILE REFINEMENTS — close the remaining "desktop-feel"
+   gaps. Placed last so these win on source order. Applies to
+   the ≤768px auto breakpoint AND forced mobile mode.
+   ========================================================= */
+@media (max-width: 768px) {
+  /* iOS Safari zooms the page when a focused field is < 16px.
+     Force every editable control to 16px so tapping never zooms.
+     Visual size stays close because padding is unchanged. */
+  input, textarea, select,
+  .text-input, .detail-title-input, .step-title-input,
+  .substep-title-input, .template-subject-input,
+  .rich-editor, .insight-body-editor, .tag-add-input,
+  .checklist-item-text, .note-add textarea, .search-input-wrap input {
+    font-size: 16px !important;
+  }
+
+  /* Momentum scrolling + no rubber-band chaining inside panes */
+  .folder-tree, .list-container, .detail-content,
+  .modal-body, .search-results, .run-mode-body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Kill the grey tap flash on iOS/Android for interactive bits */
+  button, .iconbtn, .tab, .list-item, .folder-row,
+  .export-option, .linker-item, .folder-picker-item,
+  .action-sheet button, .context-menu button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Topbar respects the notch / status bar safe area */
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--topbar-h) + env(safe-area-inset-top));
+  }
+  .layout {
+    height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top));
+  }
+}
+
+/* Same refinements for forced-mobile mode at any width */
+body[data-layout-mode="mobile"] input,
+body[data-layout-mode="mobile"] textarea,
+body[data-layout-mode="mobile"] select,
+body[data-layout-mode="mobile"] .rich-editor,
+body[data-layout-mode="mobile"] .insight-body-editor {
+  font-size: 16px !important;
+}
+body[data-layout-mode="mobile"] button,
+body[data-layout-mode="mobile"] .iconbtn,
+body[data-layout-mode="mobile"] .tab,
+body[data-layout-mode="mobile"] .list-item,
+body[data-layout-mode="mobile"] .folder-row {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Tablet gap: in AUTO mode the 769–1024px range showed a cramped
+   desktop 2-column grid. Give the list pane more room and a wider
+   detail column so it reads like a tablet, not a squeezed desktop. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .layout {
+    grid-template-columns: 180px 1fr;
+  }
+  body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .sidebar {
+    /* keep folders reachable but compact */
+  }
+  body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .detail-content {
+    padding: 28px 32px 80px;
+  }
+}

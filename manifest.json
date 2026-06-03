@@ -1,4 +1,5 @@
 {
+  "id": "/procdocs/?source=pwa",
   "name": "ProcDocs — Process & Knowledge Hub",
   "short_name": "ProcDocs",
   "description": "Personal documentation hub for processes, checklists, email templates, and insights.",
@@ -26,6 +27,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["productivity", "utilities"]

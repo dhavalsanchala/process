@@ -1826,17 +1826,21 @@ async function renderTemplateDetail(item) {
   renderTags(item, $('#tplTags'), tplTagsCb);
   refreshVars();
 
-  $('#tplCopySubj').onclick = () => {
-    navigator.clipboard.writeText(renderTemplateText(item, 'subject'));
+  $('#tplCopySubj').onclick = async () => {
+    // Subject is single-line plain text by nature.
+    await copyRich(escapeHtml(renderTemplateText(item, 'subject')), renderTemplateText(item, 'subject'));
     toast('Subject copied');
   };
-  $('#tplCopyBody').onclick = () => {
-    navigator.clipboard.writeText(renderTemplateText(item, 'body'));
-    toast('Body copied');
+  $('#tplCopyBody').onclick = async () => {
+    const ok = await copyRich(renderTemplateHtml(item), renderTemplateText(item, 'body'));
+    toast(ok ? 'Body copied (formatting kept)' : 'Copy failed');
   };
-  $('#tplCopyBoth').onclick = () => {
-    navigator.clipboard.writeText(`Subject: ${renderTemplateText(item, 'subject')}\n\n${renderTemplateText(item, 'body')}`);
-    toast('Copied');
+  $('#tplCopyBoth').onclick = async () => {
+    const subj = renderTemplateText(item, 'subject');
+    const html = `<p><strong>Subject:</strong> ${escapeHtml(subj)}</p>${renderTemplateHtml(item)}`;
+    const plain = `Subject: ${subj}\n\n${renderTemplateText(item, 'body')}`;
+    const ok = await copyRich(html, plain);
+    toast(ok ? 'Copied (formatting kept)' : 'Copy failed');
   };
   $('#tplMailto').onclick = () => {
     const s = encodeURIComponent(renderTemplateText(item, 'subject'));
@@ -1900,6 +1904,61 @@ function renderTemplateText(item, which) {
   vars.forEach(v => values[v] = item.lastValues?.[v] || '');
   if (which === 'subject') return applyVars(item.subject || '', values);
   return applyVars(stripHtml(item.body || ''), values);
+}
+
+/* Variable substitution that preserves the body's HTML formatting.
+   {{vars}} live as plain text inside the rich HTML, so a straight
+   replace on the HTML string is safe and keeps bold/italic/lists/links. */
+function renderTemplateHtml(item) {
+  const vars = extractVars(item);
+  const values = {};
+  vars.forEach(v => values[v] = item.lastValues?.[v] || '');
+  return applyVars(item.body || '', values);
+}
+
+/* Copy rich text to the clipboard: writes BOTH an HTML flavour (so
+   Outlook/Gmail/Word keep the formatting on paste) AND a plain-text
+   flavour (for editors that only accept plain text). Falls back to
+   plain text on browsers without ClipboardItem support. */
+async function copyRich(html, plain) {
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plain], { type: 'text/plain' })
+      });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+  } catch (e) {
+    // fall through to the fallbacks below
+  }
+  // Fallback 1: plain-text async API
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(plain);
+      return true;
+    }
+  } catch (e) { /* fall through */ }
+  // Fallback 2: legacy execCommand on a hidden contenteditable (keeps HTML)
+  try {
+    const holder = document.createElement('div');
+    holder.contentEditable = 'true';
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;white-space:pre-wrap';
+    holder.innerHTML = html;
+    document.body.appendChild(holder);
+    const range = document.createRange();
+    range.selectNodeContents(holder);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const ok = document.execCommand('copy');
+    sel.removeAllRanges();
+    document.body.removeChild(holder);
+    return ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 /* ===========================================================
