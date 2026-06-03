@@ -6,7 +6,7 @@
  * IMPORTANT: bump CACHE_VERSION on every deploy that changes shell files.
  * Format: procdocs-shell-YYYYMMDD-N
  */
-const CACHE_VERSION = 'procdocs-shell-20260603-5';
+const CACHE_VERSION = 'procdocs-shell-20260603-6';
 
 // Shell files = the app code itself. These are network-first.
 const SHELL_FILES = [

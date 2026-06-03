@@ -2465,3 +2465,107 @@ body[data-layout-mode="mobile"] .folder-row {
     padding: 28px 32px 80px;
   }
 }
+
+
+/* =========================================================
+   MOBILE BOTTOM TAB BAR — primary section nav at the thumb.
+   Hidden on desktop; shown in the ≤768px auto breakpoint and
+   in forced-mobile mode. Top #tabs is hidden in those contexts.
+   ========================================================= */
+.bottom-nav { display: none; }
+
+/* Shared appearance (applied when shown by the contexts below) */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: stretch;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  padding-bottom: env(safe-area-inset-bottom);
+  backdrop-filter: saturate(180%) blur(8px);
+}
+.bottom-nav-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  min-height: 56px;
+  background: none;
+  border: none;
+  color: var(--ink-mute);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: color 0.18s ease;
+}
+.bottom-nav-tab svg { display: block; opacity: 0.9; transition: transform 0.18s cubic-bezier(0.16,1,0.3,1); }
+.bottom-nav-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bottom-nav-tab.active { color: var(--accent); }
+.bottom-nav-tab.active svg { transform: translateY(-1px) scale(1.05); }
+.bottom-nav-tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent);
+}
+.bottom-nav-tab:active svg { transform: scale(0.92); }
+
+/* ---- Auto breakpoint (≤768px) ---- */
+@media (max-width: 768px) {
+  body:not([data-layout-mode="desktop"]) .bottom-nav { display: grid; }
+  body:not([data-layout-mode="desktop"]) .tabs { display: none; }
+
+  /* Lift the FAB above the bar; keep clear of the safe area */
+  body:not([data-layout-mode="desktop"]) .fab {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  body:not([data-layout-mode="desktop"]) .save-indicator {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  /* Reserve room so the bar never covers content / scroll ends */
+  body:not([data-layout-mode="desktop"]) .list-container { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  body:not([data-layout-mode="desktop"]) .folder-tree { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  body:not([data-layout-mode="desktop"]) .detail-content { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
+
+/* ---- Forced mobile mode at any width ---- */
+body[data-layout-mode="mobile"] .bottom-nav { display: grid; }
+body[data-layout-mode="mobile"] .tabs { display: none; }
+body[data-layout-mode="mobile"] .fab { bottom: calc(72px + env(safe-area-inset-bottom)); }
+body[data-layout-mode="mobile"] .save-indicator { bottom: calc(72px + env(safe-area-inset-bottom)); }
+body[data-layout-mode="mobile"] .list-container { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+body[data-layout-mode="mobile"] .folder-tree { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+body[data-layout-mode="mobile"] .detail-content { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+/* Keep the folders-screen footer (Trash) clear of the bottom nav */
+@media (max-width: 768px) {
+  body:not([data-layout-mode="desktop"]) .sidebar-footer {
+    padding-bottom: calc(14px + 72px + env(safe-area-inset-bottom));
+  }
+}
+body[data-layout-mode="mobile"] .sidebar-footer {
+  padding-bottom: calc(14px + 72px + env(safe-area-inset-bottom));
+}

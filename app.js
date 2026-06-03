@@ -698,19 +698,32 @@ $('#multiselectDelete').onclick = () => {
 $('#multiselectClear').onclick = clearSelection;
 
 /* ---------- Tabs ---------- */
-$$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
-  state.currentTab = t.dataset.tab;
+function setActiveTab(tab) {
+  // Keep both the desktop top tabs and the mobile bottom nav in sync.
+  $$('#tabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  $$('#bottomNav .bottom-nav-tab').forEach(x => {
+    const on = x.dataset.tab === tab;
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+function selectTab(tab) {
+  state.currentTab = tab;
   state.currentFolderId = null;
   state.currentItemId = null;
   clearSelection();
-  $$('#tabs .tab').forEach(x => x.classList.toggle('active', x === t));
+  setActiveTab(tab);
   $('#listTitle').textContent = ({processes:'Processes', checklists:'Checklists', emailTemplates:'Email Templates', insights:'Insights & Performance'})[state.currentTab];
   $('#detailEmpty').hidden = false;
   $('#detailContent').hidden = true;
   renderFolderTree();
   loadList();
   if (isMobile()) setMobileScreen('list');
-}));
+}
+
+$$('#tabs .tab, #bottomNav .bottom-nav-tab').forEach(t =>
+  t.addEventListener('click', () => selectTab(t.dataset.tab)));
 
 /* ---------- List rendering ---------- */
 async function loadList() {
@@ -1409,7 +1422,7 @@ function renderLinkedCardBody(host, it, store) {
 function jumpToItem(tab, id) {
   state.currentTab = tab;
   state.currentFolderId = null;
-  $$('#tabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  setActiveTab(tab);
   $('#listTitle').textContent = ({processes:'Processes', checklists:'Checklists', emailTemplates:'Email Templates', insights:'Insights & Performance'})[tab];
   renderFolderTree();
   loadList().then(() => openItem(id));
