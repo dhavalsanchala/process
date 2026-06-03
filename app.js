@@ -3014,16 +3014,29 @@ $('#fabBtn').onclick = createItem;
 
 /* ---------- Layout mode (Auto / Desktop / Mobile) ---------- */
 const MOBILE_BREAKPOINT = 768;
-// 'auto' = follow screen width (original behaviour)
+// Touch phones/tablets often report a CSS width above 768px in portrait
+// (e.g. many Samsung devices land at ~780–900px). Treating those as
+// "desktop" was forcing the multi-pane layout on real phones. So in AUTO
+// mode we also treat a coarse-pointer (touch) device up to this wider
+// ceiling as mobile.
+const MOBILE_TOUCH_CEILING = 950;
+// 'auto' = follow screen width AND device type (original behaviour, fixed)
 // 'desktop' = force the multi-pane desktop layout regardless of width
 // 'mobile' = force the single-screen mobile layout regardless of width
 let layoutMode = 'auto';
 
-// The effective layout: resolves 'auto' against the current viewport width.
+// True when the primary input is coarse (finger) — i.e. a phone/tablet.
+const isTouchDevice = () =>
+  window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+
+// The effective layout: resolves 'auto' against viewport width + device.
 const isMobile = () => {
   if (layoutMode === 'mobile') return true;
   if (layoutMode === 'desktop') return false;
-  return window.innerWidth <= MOBILE_BREAKPOINT;
+  if (window.innerWidth <= MOBILE_BREAKPOINT) return true;
+  // Wider, but it's a touch device in a phone-ish width band → mobile.
+  if (isTouchDevice() && window.innerWidth <= MOBILE_TOUCH_CEILING) return true;
+  return false;
 };
 
 // Push the chosen mode onto <body> so CSS can force the matching layout.

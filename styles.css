@@ -1754,7 +1754,7 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
 /* =========================================================
    MOBILE (≤768px) — full overhaul
    ========================================================= */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (max-width: 950px) {
   :root {
     --topbar-h: 56px;
   }
@@ -2397,7 +2397,7 @@ body[data-layout-mode="mobile"] .context-menu { display: none !important; }
    gaps. Placed last so these win on source order. Applies to
    the ≤768px auto breakpoint AND forced mobile mode.
    ========================================================= */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (max-width: 950px) {
   /* iOS Safari zooms the page when a focused field is < 16px.
      Force every editable control to 16px so tapping never zooms.
      Visual size stays close because padding is unchanged. */
@@ -2451,15 +2451,13 @@ body[data-layout-mode="mobile"] .folder-row {
   touch-action: manipulation;
 }
 
-/* Tablet gap: in AUTO mode the 769–1024px range showed a cramped
-   desktop 2-column grid. Give the list pane more room and a wider
-   detail column so it reads like a tablet, not a squeezed desktop. */
-@media (min-width: 769px) and (max-width: 1024px) {
+/* Tablet gap: a small DESKTOP window (mouse) in the 769–1024px range
+   showed a cramped 2-column grid. Give it more room. Restricted to
+   fine-pointer devices so touch phones in this width band fall through
+   to the mobile layout instead. */
+@media (min-width: 769px) and (max-width: 1024px) and (pointer: fine) {
   body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .layout {
     grid-template-columns: 180px 1fr;
-  }
-  body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .sidebar {
-    /* keep folders reachable but compact */
   }
   body:not([data-layout-mode="desktop"]):not([data-layout-mode="mobile"]) .detail-content {
     padding: 28px 32px 80px;
@@ -2533,7 +2531,7 @@ body[data-layout-mode="mobile"] .folder-row {
 .bottom-nav-tab:active svg { transform: scale(0.92); }
 
 /* ---- Auto breakpoint (≤768px) ---- */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (max-width: 950px) {
   body:not([data-layout-mode="desktop"]) .bottom-nav { display: grid; }
   body:not([data-layout-mode="desktop"]) .tabs { display: none; }
 
@@ -2561,7 +2559,7 @@ body[data-layout-mode="mobile"] .folder-tree { padding-bottom: calc(72px + env(s
 body[data-layout-mode="mobile"] .detail-content { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
 /* Keep the folders-screen footer (Trash) clear of the bottom nav */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (max-width: 950px) {
   body:not([data-layout-mode="desktop"]) .sidebar-footer {
     padding-bottom: calc(14px + 72px + env(safe-area-inset-bottom));
   }
