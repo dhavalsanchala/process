@@ -1758,6 +1758,9 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
   :root {
     --topbar-h: 56px;
   }
+
+  /* The page itself scrolls on mobile (panes are in normal flow). */
+  html, body { height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto; }
   
   /* Hide desktop-only elements */
   .desktop-only { display: none !important; }
@@ -1767,6 +1770,8 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
   .topbar {
     padding: 0 12px;
     gap: 8px;
+    position: sticky;
+    top: 0;
   }
   .topbar-left {
     gap: 12px;
@@ -1797,46 +1802,53 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
   .topbar-right .iconbtn { width: 40px; height: 40px; }
   #sidebarToggleBtn { display: none; }
   
-  /* Layout becomes a single-column stack of "screens" */
+  /* ---------------------------------------------------------
+     IN-FLOW MOBILE LAYOUT (inline-expand model).
+     No absolute positioning, no transforms, no dependency on a
+     JS attribute matching the media-query width. Panes are normal
+     blocks; body classes toggle which one is visible. This cannot
+     fall into a broken half-state.
+     --------------------------------------------------------- */
   .layout {
     display: block;
-    height: calc(100vh - var(--topbar-h));
-    height: calc(100dvh - var(--topbar-h));
-    position: relative;
+    height: auto;
+    min-height: calc(100dvh - var(--topbar-h));
+    position: static;
   }
   .sidebar, .list-pane, .detail-pane {
-    position: absolute;
-    inset: 0;
+    position: static;
+    inset: auto;
     width: 100%;
+    transform: none !important;
+    transition: none;
     border-right: none;
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     background: var(--bg-elev);
-    z-index: 1;
-  }
-  
-  /* "Screen" navigation states driven by body data-attribute */
-  body[data-mobile-screen="folders"] .sidebar { transform: translateX(0); z-index: 3; }
-  body[data-mobile-screen="folders"] .list-pane { transform: translateX(100%); }
-  body[data-mobile-screen="folders"] .detail-pane { transform: translateX(200%); }
-  
-  body[data-mobile-screen="list"] .sidebar { transform: translateX(-100%); }
-  body[data-mobile-screen="list"] .list-pane { transform: translateX(0); z-index: 3; }
-  body[data-mobile-screen="list"] .detail-pane { transform: translateX(100%); }
-  
-  body[data-mobile-screen="detail"] .sidebar { transform: translateX(-100%); }
-  body[data-mobile-screen="detail"] .list-pane { transform: translateX(-100%); }
-  body[data-mobile-screen="detail"] .detail-pane { transform: translateX(0); z-index: 3; }
-  
-  /* Default screen is list when nothing is set */
-  body:not([data-mobile-screen]) .sidebar { transform: translateX(-100%); }
-  body:not([data-mobile-screen]) .detail-pane { transform: translateX(100%); }
-  
-  /* Sidebar full-screen */
-  .sidebar {
-    border-right: none;
+    z-index: auto;
     opacity: 1 !important;
     pointer-events: auto !important;
   }
+
+  /* Default (list view): show the list only. */
+  .sidebar { display: none; }
+  .detail-pane { display: none; }
+  .list-pane { display: flex; flex-direction: column; }
+
+  /* Panes flow into the single page scroll — no inner fixed-height scrollers. */
+  .list-pane, .detail-pane, .sidebar { overflow: visible; height: auto; }
+  .list-container, .folder-tree { overflow: visible; flex: none; height: auto; }
+  .detail-pane { overflow: visible; }
+
+  /* Folders view: show folders only. */
+  body.m-folders .sidebar { display: flex; flex-direction: column; }
+  body.m-folders .list-pane { display: none; }
+  body.m-folders .detail-pane { display: none; }
+
+  /* Detail view: show the opened item only (back button returns to list). */
+  body.m-detail .detail-pane { display: block; }
+  body.m-detail .list-pane { display: none; }
+  body.m-detail .sidebar { display: none; }
+
+  /* Sidebar styling */
   .sidebar-header { padding: 18px 20px 14px; }
   .sidebar-title { font-size: 14px; }
   .folder-tree { padding: 4px 12px 80px; }
@@ -1853,8 +1865,6 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
   
   /* List pane */
   .list-pane {
-    opacity: 1 !important;
-    pointer-events: auto !important;
     border-right: none;
   }
   .list-header {
@@ -1886,14 +1896,29 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
   .multiselect-bar { padding: 10px 16px; font-size: 13px; flex-wrap: wrap; }
   .multiselect-bar .ghost-btn { padding: 8px 12px; font-size: 13px; min-height: 36px; }
   
-  /* Detail pane */
+  /* Detail pane — in-flow, with a sticky back bar at the top */
   .detail-pane {
-    opacity: 1 !important;
-    pointer-events: auto !important;
+    position: static;
   }
-  .detail-mobile-back { display: flex; }
+  .detail-mobile-back {
+    display: flex;
+    position: sticky;
+    top: 0;
+    left: auto;
+    z-index: 11;
+    margin: 0;
+    width: 100%;
+    height: 48px;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+    justify-content: flex-start;
+    padding-left: 14px;
+    gap: 8px;
+  }
   .detail-content {
-    padding: 64px 18px 100px;
+    padding: 18px 18px 100px;
     max-width: 100%;
   }
   .detail-title-input {
@@ -2030,6 +2055,9 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
      last inside the ≤768px query so they win.
      --------------------------------------------------------- */
   body[data-layout-mode="desktop"] { --topbar-h: 60px; }
+  body[data-layout-mode="desktop"] html,
+  html:has(body[data-layout-mode="desktop"]),
+  body[data-layout-mode="desktop"] { height: 100%; overflow: hidden; }
   body[data-layout-mode="desktop"] .desktop-only { display: flex !important; }
   body[data-layout-mode="desktop"] .brand-name { display: block; }
   body[data-layout-mode="desktop"] #sidebarToggleBtn { display: flex; }
@@ -2100,6 +2128,10 @@ body:has(.layout.sidebar-collapsed) #sidebarToggleBtn {
    ========================================================= */
 body[data-layout-mode="mobile"] {
     --topbar-h: 56px;
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   
@@ -2112,6 +2144,8 @@ body[data-layout-mode="mobile"] .save-indicator { bottom: 80px; }
 body[data-layout-mode="mobile"] .topbar {
     padding: 0 12px;
     gap: 8px;
+    position: sticky;
+    top: 0;
   }
 body[data-layout-mode="mobile"] .topbar-left {
     gap: 12px;
@@ -2144,49 +2178,47 @@ body[data-layout-mode="mobile"] .topbar-right .iconbtn { width: 40px; height: 40
 body[data-layout-mode="mobile"] #sidebarToggleBtn { display: none; }
 
   
-  /* Layout becomes a single-column stack of "screens" */
+  /* In-flow mobile layout (same robust model as the media-query block) */
 body[data-layout-mode="mobile"] .layout {
     display: block;
-    height: calc(100vh - var(--topbar-h));
-    height: calc(100dvh - var(--topbar-h));
-    position: relative;
+    height: auto;
+    min-height: calc(100dvh - var(--topbar-h));
+    position: static;
   }
 body[data-layout-mode="mobile"] .sidebar,
 body[data-layout-mode="mobile"] .list-pane,
 body[data-layout-mode="mobile"] .detail-pane {
-    position: absolute;
-    inset: 0;
+    position: static;
+    inset: auto;
     width: 100%;
+    transform: none !important;
+    transition: none;
     border-right: none;
-    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     background: var(--bg-elev);
-    z-index: 1;
-  }
-
-  
-  /* "Screen" navigation states driven by body data-attribute */
-body[data-layout-mode="mobile"][data-mobile-screen="folders"] .sidebar { transform: translateX(0); z-index: 3; }
-body[data-layout-mode="mobile"][data-mobile-screen="folders"] .list-pane { transform: translateX(100%); }
-body[data-layout-mode="mobile"][data-mobile-screen="folders"] .detail-pane { transform: translateX(200%); }
-body[data-layout-mode="mobile"][data-mobile-screen="list"] .sidebar { transform: translateX(-100%); }
-body[data-layout-mode="mobile"][data-mobile-screen="list"] .list-pane { transform: translateX(0); z-index: 3; }
-body[data-layout-mode="mobile"][data-mobile-screen="list"] .detail-pane { transform: translateX(100%); }
-body[data-layout-mode="mobile"][data-mobile-screen="detail"] .sidebar { transform: translateX(-100%); }
-body[data-layout-mode="mobile"][data-mobile-screen="detail"] .list-pane { transform: translateX(-100%); }
-body[data-layout-mode="mobile"][data-mobile-screen="detail"] .detail-pane { transform: translateX(0); z-index: 3; }
-
-  
-  /* Default screen is list when nothing is set */
-body[data-layout-mode="mobile"]:not([data-mobile-screen]) .sidebar { transform: translateX(-100%); }
-body[data-layout-mode="mobile"]:not([data-mobile-screen]) .detail-pane { transform: translateX(100%); }
-
-  
-  /* Sidebar full-screen */
-body[data-layout-mode="mobile"] .sidebar {
-    border-right: none;
+    z-index: auto;
     opacity: 1 !important;
     pointer-events: auto !important;
   }
+
+body[data-layout-mode="mobile"] .sidebar { display: none; }
+body[data-layout-mode="mobile"] .detail-pane { display: none; }
+body[data-layout-mode="mobile"] .list-pane { display: flex; flex-direction: column; }
+
+body[data-layout-mode="mobile"] .list-pane,
+body[data-layout-mode="mobile"] .detail-pane,
+body[data-layout-mode="mobile"] .sidebar { overflow: visible; height: auto; }
+body[data-layout-mode="mobile"] .list-container,
+body[data-layout-mode="mobile"] .folder-tree { overflow: visible; flex: none; height: auto; }
+
+body[data-layout-mode="mobile"].m-folders .sidebar { display: flex; flex-direction: column; }
+body[data-layout-mode="mobile"].m-folders .list-pane { display: none; }
+body[data-layout-mode="mobile"].m-folders .detail-pane { display: none; }
+
+body[data-layout-mode="mobile"].m-detail .detail-pane { display: block; }
+body[data-layout-mode="mobile"].m-detail .list-pane { display: none; }
+body[data-layout-mode="mobile"].m-detail .sidebar { display: none; }
+
+  /* Sidebar styling */
 body[data-layout-mode="mobile"] .sidebar-header { padding: 18px 20px 14px; }
 body[data-layout-mode="mobile"] .sidebar-title { font-size: 14px; }
 body[data-layout-mode="mobile"] .folder-tree { padding: 4px 12px 80px; }
@@ -2236,14 +2268,29 @@ body[data-layout-mode="mobile"] .multiselect-bar { padding: 10px 16px; font-size
 body[data-layout-mode="mobile"] .multiselect-bar .ghost-btn { padding: 8px 12px; font-size: 13px; min-height: 36px; }
 
   
-  /* Detail pane */
+  /* Detail pane — in-flow with sticky back bar */
 body[data-layout-mode="mobile"] .detail-pane {
-    opacity: 1 !important;
-    pointer-events: auto !important;
+    position: static;
   }
-body[data-layout-mode="mobile"] .detail-mobile-back { display: flex; }
+body[data-layout-mode="mobile"] .detail-mobile-back {
+    display: flex;
+    position: sticky;
+    top: 0;
+    left: auto;
+    z-index: 11;
+    margin: 0;
+    width: 100%;
+    height: 48px;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+    justify-content: flex-start;
+    padding-left: 14px;
+    gap: 8px;
+  }
 body[data-layout-mode="mobile"] .detail-content {
-    padding: 64px 18px 100px;
+    padding: 18px 18px 100px;
     max-width: 100%;
   }
 body[data-layout-mode="mobile"] .detail-title-input {
@@ -2428,9 +2475,6 @@ body[data-layout-mode="mobile"] .context-menu { display: none !important; }
   .topbar {
     padding-top: env(safe-area-inset-top);
     height: calc(var(--topbar-h) + env(safe-area-inset-top));
-  }
-  .layout {
-    height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top));
   }
 }
 

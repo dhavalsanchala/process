@@ -3064,28 +3064,49 @@ async function setLayoutMode(mode) {
   applyLayoutMode();
 }
 
-/* ---------- Mobile screen navigation ---------- */
+/* ---------- Mobile navigation (inline-expand model) ----------
+   No pane is absolutely positioned on mobile. Everything is in normal
+   document flow. These body classes only toggle which block is visible;
+   they don't need to agree with any media-query width, so the layout
+   can't fall into a broken half-state. The same function names are kept
+   so existing call sites work unchanged. */
 function setMobileScreen(name) {
   if (!isMobile()) return;
-  document.body.dataset.mobileScreen = name;
+  const b = document.body;
+  if (name === 'folders') {
+    b.classList.add('m-folders');
+    b.classList.remove('m-detail');
+  } else if (name === 'detail') {
+    b.classList.add('m-detail');
+    b.classList.remove('m-folders');
+    // Bring the freshly-opened item into view at the top.
+    requestAnimationFrame(() => {
+      const d = document.getElementById('detailPane');
+      if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  } else { // 'list' — the default
+    b.classList.remove('m-folders');
+    b.classList.remove('m-detail');
+  }
 }
 function clearMobileScreen() {
-  delete document.body.dataset.mobileScreen;
+  document.body.classList.remove('m-folders', 'm-detail');
 }
 function initMobileScreen() {
-  if (isMobile()) {
-    // Default to "list" view on mobile if nothing selected
-    if (!document.body.dataset.mobileScreen) {
-      document.body.dataset.mobileScreen = 'list';
-    }
-  } else {
-    clearMobileScreen();
-  }
+  // On desktop, strip any mobile state so the grid is clean.
+  if (!isMobile()) clearMobileScreen();
 }
 window.addEventListener('resize', initMobileScreen);
 
 $('#listBackBtn').onclick = () => setMobileScreen('folders');
-$('#detailBackBtn').onclick = () => setMobileScreen('list');
+$('#detailBackBtn').onclick = () => {
+  setMobileScreen('list');
+  // Return focus to the top of the list after closing the detail.
+  requestAnimationFrame(() => {
+    const l = document.getElementById('listPane');
+    if (l) l.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+};
 
 /* ---------- Action sheet (mobile context menu) ---------- */
 function openActionSheet({ title, actions }) {
