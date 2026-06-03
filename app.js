@@ -1780,11 +1780,20 @@ async function renderTemplateDetail(item) {
       <button data-cmd="insertOrderedList">1.</button>
       <span class="sep"></span>
       <button data-cmd="createLink">🔗</button>
+      <label class="toolbar-color" title="Text colour">
+        <span class="toolbar-color-swatch">A</span>
+        <input type="color" id="tplColor" value="#c0392b">
+      </label>
       <span class="sep"></span>
       <button id="togglePlain" style="margin-left:auto">Plain ⇄ Rich</button>
     </div>
     <div class="rich-editor" id="tplBody" contenteditable="true" data-placeholder="Body — use {{variable_name}} for fill-ins">${item.body || ''}</div>
     <textarea id="tplBodyPlain" class="rich-editor" style="display:none;width:100%;min-height:150px;font-family:var(--font-mono);font-size:13px" placeholder="Plain text body"></textarea>
+    <div class="quick-placeholders" id="tplQuickPlaceholders">
+      <span class="quick-placeholders-label">Insert placeholder:</span>
+      ${QUICK_PLACEHOLDERS.map(p => `<button type="button" class="placeholder-chip" data-ph="${escapeHtml(p.name)}">${escapeHtml(p.label)}</button>`).join('')}
+      <button type="button" class="placeholder-chip placeholder-chip-custom" id="tplCustomPlaceholder">+ Custom…</button>
+    </div>
     <div class="detail-section-title">Variables</div>
     <div class="template-vars-panel" id="tplVars"></div>
     <div class="detail-section-title">Preview</div>
@@ -1825,6 +1834,22 @@ async function renderTemplateDetail(item) {
       saveItem(item);
     };
   });
+  // Text colour: apply to the current selection in the body editor.
+  const colorInput = $('#tplColor');
+  if (colorInput) {
+    const swatch = $('#tplToolbar .toolbar-color-swatch');
+    if (swatch) swatch.style.color = colorInput.value;
+    colorInput.addEventListener('input', (e) => {
+      if (swatch) swatch.style.color = e.target.value;
+      bodyEl.focus();
+      document.execCommand('styleWithCSS', false, true);
+      document.execCommand('foreColor', false, e.target.value);
+      item.body = bodyEl.innerHTML;
+      bodyPlainEl.value = stripHtml(bodyEl.innerHTML);
+      saveItem(item);
+      refreshVars();
+    });
+  }
   $('#togglePlain').onclick = () => {
     if (bodyEl.style.display === 'none') {
       bodyEl.style.display = '';
@@ -1833,6 +1858,34 @@ async function renderTemplateDetail(item) {
       bodyEl.style.display = 'none';
       bodyPlainEl.style.display = '';
     }
+  };
+
+  // Track which field the caret was last in, so placeholders insert there.
+  lastTplField = { type: 'body', el: bodyEl };
+  bodyEl.addEventListener('focus', () => { lastTplField = { type: 'body', el: bodyEl }; });
+  subjEl.addEventListener('focus', () => { lastTplField = { type: 'subject', el: subjEl }; });
+
+  // Preserve pasted formatting (including text colour) in the body editor.
+  attachRichPaste(bodyEl, () => {
+    item.body = bodyEl.innerHTML;
+    bodyPlainEl.value = stripHtml(bodyEl.innerHTML);
+    saveItem(item);
+    refreshVars();
+  });
+
+  // Quick-placeholder chips.
+  $('#tplQuickPlaceholders').querySelectorAll('.placeholder-chip[data-ph]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      insertPlaceholderToken(btn.dataset.ph);
+    };
+  });
+  $('#tplCustomPlaceholder').onclick = (e) => {
+    e.preventDefault();
+    let name = prompt('Placeholder name (letters, numbers, underscores):', '');
+    if (!name) return;
+    name = name.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (name) insertPlaceholderToken(name);
   };
 
   const tplTagsCb = () => { saveItem(item); renderTags(item, $('#tplTags'), tplTagsCb); };
@@ -1861,6 +1914,116 @@ async function renderTemplateDetail(item) {
     window.location.href = `mailto:?subject=${s}&body=${b}`;
   };
 }
+
+/* Preserve formatting (incl. text colour) when pasting into a
+   contenteditable. Some mobile browsers (notably Samsung Internet)
+   strip inline styles on default paste; this handler inserts the
+   clipboard's own HTML, keeping color/bold/italic/lists/links, and
+   only removes scripts and Word/Office junk. */
+function cleanPastedHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // Remove dangerous / noise nodes
+  tmp.querySelectorAll('script, style, meta, link, title, o\\:p').forEach(n => n.remove());
+  // Strip Office conditional-comment leftovers and event handlers
+  tmp.querySelectorAll('*').forEach(node => {
+    [...node.attributes].forEach(attr => {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) node.removeAttribute(attr.name);          // inline JS
+      if (name === 'class' || name === 'lang' || name.startsWith('xmlns')) node.removeAttribute(attr.name);
+      // Keep `style` (that's where color lives) but drop mso-* declarations
+      if (name === 'style') {
+        const cleaned = attr.value
+          .split(';')
+          .filter(d => d.trim() && !/^\s*mso-/i.test(d) && !/^\s*font-family\s*:/i.test(d))
+          .join(';');
+        if (cleaned.trim()) node.setAttribute('style', cleaned);
+        else node.removeAttribute('style');
+      }
+    });
+  });
+  return tmp.innerHTML;
+}
+
+function attachRichPaste(editorEl, onChange) {
+  editorEl.addEventListener('paste', (e) => {
+    const cb = e.clipboardData || window.clipboardData;
+    if (!cb) return; // let the browser handle it
+    const html = cb.getData('text/html');
+    const plain = cb.getData('text/plain');
+    if (!html && !plain) return;
+    e.preventDefault();
+    const toInsert = html ? cleanPastedHtml(html) : escapeHtml(plain).replace(/\n/g, '<br>');
+    // Insert at the caret, preserving formatting
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const frag = range.createContextualFragment(toInsert);
+      const lastNode = frag.lastChild;
+      range.insertNode(frag);
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      editorEl.innerHTML += toInsert;
+    }
+    if (onChange) onChange();
+  });
+}
+
+/* Insert a {{placeholder}} token at the caret of whichever template
+   field was last focused (body editor or subject input). */
+let lastTplField = null; // { type: 'body'|'subject', el }
+function insertPlaceholderToken(name) {
+  const token = `{{${name}}}`;
+  const f = lastTplField;
+  if (f && f.type === 'subject') {
+    const input = f.el;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + token + input.value.slice(end);
+    const pos = start + token.length;
+    input.setSelectionRange(pos, pos);
+    input.focus();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  // Default: body editor
+  const editor = $('#tplBody');
+  if (!editor) return;
+  editor.focus();
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const node = document.createTextNode(token);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    editor.innerHTML += token;
+  }
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/* The standard placeholder set, tuned for publication / congress writeups. */
+const QUICK_PLACEHOLDERS = [
+  { label: 'Author name', name: 'author_name' },
+  { label: 'Congress name', name: 'congress_name' },
+  { label: 'Year', name: 'year' },
+  { label: 'Date', name: 'date' },
+  { label: 'Journal', name: 'journal_name' },
+  { label: 'Product', name: 'product_name' },
+  { label: 'Therapeutic area', name: 'therapeutic_area' },
+  { label: 'Recipient', name: 'recipient_name' },
+  { label: 'Abstract title', name: 'abstract_title' }
+];
 
 function extractVars(item) {
   const text = (item.subject || '') + ' ' + stripHtml(item.body || '');
@@ -1902,14 +2065,24 @@ function renderTemplateVars(item) {
 }
 function renderTemplatePreview(item, values) {
   const subj = applyVars(item.subject || '', values);
-  const body = applyVars(stripHtml(item.body || ''), values);
+  // Render the body as formatted HTML (variables filled in) so the
+  // preview reflects colour and styling exactly as it will be copied.
+  const bodyHtml = applyVarsHtml(item.body || '', values);
   $('#tplPreview').innerHTML = `
     <div class="template-preview-subject">${escapeHtml(subj) || '<em style="color:var(--ink-faint)">(no subject)</em>'}</div>
-    <div class="template-preview-body">${escapeHtml(body) || '<em style="color:var(--ink-faint)">(no body)</em>'}</div>
+    <div class="template-preview-body">${bodyHtml || '<em style="color:var(--ink-faint)">(no body)</em>'}</div>
   `;
 }
 function applyVars(text, values) {
   return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => values[k] || `{{${k}}}`);
+}
+/* Same as applyVars but escapes the substituted VALUES, for use when the
+   surrounding text is HTML (body markup). The body's own tags are left
+   intact; only the user-entered values are escaped so a stray "<" can't
+   break the markup. Unfilled tokens stay visible as {{name}}. */
+function applyVarsHtml(html, values) {
+  return html.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) =>
+    values[k] ? escapeHtml(values[k]) : `{{${k}}}`);
 }
 function renderTemplateText(item, which) {
   const vars = extractVars(item);
@@ -1926,7 +2099,7 @@ function renderTemplateHtml(item) {
   const vars = extractVars(item);
   const values = {};
   vars.forEach(v => values[v] = item.lastValues?.[v] || '');
-  return applyVars(item.body || '', values);
+  return applyVarsHtml(item.body || '', values);
 }
 
 /* Copy rich text to the clipboard: writes BOTH an HTML flavour (so
