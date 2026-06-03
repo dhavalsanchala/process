@@ -248,6 +248,20 @@
         </div>
       </div>
       <div class="settings-section">
+        <div class="settings-section-title">Reports</div>
+        <div class="settings-sub" style="margin-bottom:12px">Generate a formatted report of your content. HTML opens in any browser and prints to PDF; the editable version opens in Word or Google Docs.</div>
+        <div class="report-types" id="reportTypes">
+          <label class="report-type"><input type="checkbox" value="processes" checked> Processes</label>
+          <label class="report-type"><input type="checkbox" value="checklists" checked> Checklists</label>
+          <label class="report-type"><input type="checkbox" value="emailTemplates" checked> Templates</label>
+          <label class="report-type"><input type="checkbox" value="insights" checked> Insights</label>
+        </div>
+        <div class="report-actions">
+          <button class="ghost-btn" id="reportHtmlBtn">⬇ Download HTML</button>
+          <button class="ghost-btn" id="reportDocBtn">⬇ Download editable (Word)</button>
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="settings-section-title">Auto-backups</div>
         <div class="settings-sub" style="margin-bottom:12px">In-browser snapshots taken once every 24 hours. Safety net — not a replacement for real exports.</div>
         <div class="auto-backups-list" id="autoBackupsList"></div>

@@ -1903,7 +1903,9 @@ async function renderTemplateDetail(item) {
   };
   $('#tplCopyBoth').onclick = async () => {
     const subj = renderTemplateText(item, 'subject');
-    const html = `<p><strong>Subject:</strong> ${escapeHtml(subj)}</p>${renderTemplateHtml(item)}`;
+    const subjHtml = escapeHtml(subj).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+      (_, k) => `<span style="color:#dc2626">{{${k}}}</span>`);
+    const html = `<p><strong>Subject:</strong> ${subjHtml}</p>${renderTemplateHtml(item)}`;
     const plain = `Subject: ${subj}\n\n${renderTemplateText(item, 'body')}`;
     const ok = await copyRich(html, plain);
     toast(ok ? 'Copied (formatting kept)' : 'Copy failed');
@@ -2064,12 +2066,15 @@ function renderTemplateVars(item) {
   renderTemplatePreview(item, values);
 }
 function renderTemplatePreview(item, values) {
-  const subj = applyVars(item.subject || '', values);
+  // Subject: escape to plain text, then highlight any unfilled tokens.
+  const subjFilled = applyVars(item.subject || '', values);
+  const subj = escapeHtml(subjFilled).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+    (_, k) => `<span class="tpl-token">{{${k}}}</span>`);
   // Render the body as formatted HTML (variables filled in) so the
   // preview reflects colour and styling exactly as it will be copied.
-  const bodyHtml = applyVarsHtml(item.body || '', values);
+  const bodyHtml = applyVarsHtml(item.body || '', values, true);
   $('#tplPreview').innerHTML = `
-    <div class="template-preview-subject">${escapeHtml(subj) || '<em style="color:var(--ink-faint)">(no subject)</em>'}</div>
+    <div class="template-preview-subject">${subj || '<em style="color:var(--ink-faint)">(no subject)</em>'}</div>
     <div class="template-preview-body">${bodyHtml || '<em style="color:var(--ink-faint)">(no body)</em>'}</div>
   `;
 }
@@ -2080,9 +2085,15 @@ function applyVars(text, values) {
    surrounding text is HTML (body markup). The body's own tags are left
    intact; only the user-entered values are escaped so a stray "<" can't
    break the markup. Unfilled tokens stay visible as {{name}}. */
-function applyVarsHtml(html, values) {
-  return html.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) =>
-    values[k] ? escapeHtml(values[k]) : `{{${k}}}`);
+function applyVarsHtml(html, values, highlightUnfilled) {
+  return html.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => {
+    if (values[k]) return escapeHtml(values[k]);
+    // Inline style (not a CSS class) so the red survives into email HTML,
+    // where the app's stylesheet isn't present. Marks blanks you forgot.
+    return highlightUnfilled
+      ? `<span style="color:#dc2626">{{${k}}}</span>`
+      : `{{${k}}}`;
+  });
 }
 function renderTemplateText(item, which) {
   const vars = extractVars(item);
@@ -2099,7 +2110,7 @@ function renderTemplateHtml(item) {
   const vars = extractVars(item);
   const values = {};
   vars.forEach(v => values[v] = item.lastValues?.[v] || '');
-  return applyVarsHtml(item.body || '', values);
+  return applyVarsHtml(item.body || '', values, true);
 }
 
 /* Copy rich text to the clipboard: writes BOTH an HTML flavour (so
@@ -2433,6 +2444,183 @@ function downloadFile(name, content, mime) {
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ===========================================================
+   REPORTS — render selected content types into a styled HTML
+   document, downloadable as .html (viewable/printable) or as a
+   Word-openable .doc (fully editable, keeps formatting & colour).
+   =========================================================== */
+
+// Map a folderId to a human folder name (for grouping in the report).
+async function reportFolderMap() {
+  const folders = await db.getAll('folders');
+  const map = {};
+  folders.forEach(f => { map[f.id] = f.name; });
+  return map;
+}
+
+function reportEscape(s) {
+  return escapeHtml(String(s == null ? '' : s));
+}
+
+// Render one process (with steps, substeps, notes) as HTML.
+async function reportProcessHtml(p) {
+  let h = `<h3>${reportEscape(p.title || 'Untitled process')}</h3>`;
+  if (p.description) h += `<p class="muted">${reportEscape(p.description)}</p>`;
+  if (p.tags?.length) h += `<p class="tags">Tags: ${p.tags.map(reportEscape).join(', ')}</p>`;
+  if ((p.steps || []).length) {
+    h += `<ol class="steps">`;
+    for (const s of p.steps) {
+      h += `<li><strong>${reportEscape(s.title || 'Untitled step')}</strong>`;
+      if (s.status && s.status !== 'not_started') h += ` <span class="status">(${reportEscape(s.status)})</span>`;
+      if (s.description) h += `<div class="step-desc">${s.description}</div>`;
+      h += reportSubstepsHtml(s.substeps);
+      const notes = await db.getByIndex('stepNotes', 'stepId', s.id);
+      if (notes.length) {
+        notes.sort((a,b) => (a.createdAt||'').localeCompare(b.createdAt||''));
+        h += `<div class="notes"><em>Notes:</em><ul>`;
+        for (const n of notes) h += `<li>${reportEscape(n.flag || '')} ${reportEscape(formatFull(n.createdAt))} — ${reportEscape(n.text)}</li>`;
+        h += `</ul></div>`;
+      }
+      h += `</li>`;
+    }
+    h += `</ol>`;
+  }
+  return h;
+}
+function reportSubstepsHtml(subs) {
+  if (!subs || !subs.length) return '';
+  let h = '<ul class="substeps">';
+  for (const s of subs) {
+    h += `<li>${reportEscape(s.title || '')}${reportSubstepsHtml(s.substeps)}</li>`;
+  }
+  return h + '</ul>';
+}
+
+function reportChecklistHtml(c) {
+  let h = `<h3>${reportEscape(c.title || 'Untitled checklist')}</h3>`;
+  if (c.description) h += `<p class="muted">${reportEscape(c.description)}</p>`;
+  if (c.tags?.length) h += `<p class="tags">Tags: ${c.tags.map(reportEscape).join(', ')}</p>`;
+  if ((c.items || []).length) {
+    h += `<ul class="checklist">`;
+    for (const it of c.items) {
+      h += `<li><span class="box">${it.checked ? '☑' : '☐'}</span> ${reportEscape(it.text || '')}</li>`;
+    }
+    h += `</ul>`;
+  }
+  return h;
+}
+
+function reportTemplateHtml(t) {
+  let h = `<h3>${reportEscape(t.title || 'Untitled template')}</h3>`;
+  if (t.tags?.length) h += `<p class="tags">Tags: ${t.tags.map(reportEscape).join(', ')}</p>`;
+  if (t.subject) h += `<p><strong>Subject:</strong> ${reportEscape(t.subject)}</p>`;
+  // Body keeps its rich formatting and colour.
+  h += `<div class="tpl-body">${t.body || '<em class="muted">(no body)</em>'}</div>`;
+  const vars = extractVars(t);
+  if (vars.length) h += `<p class="muted">Placeholders: ${vars.map(v => '{{' + reportEscape(v) + '}}').join(', ')}</p>`;
+  return h;
+}
+
+function reportInsightHtml(i) {
+  let h = `<h3>${reportEscape(i.flag ? i.flag + ' ' : '')}${reportEscape(i.title || 'Untitled insight')}</h3>`;
+  if (i.date) h += `<p class="muted">${reportEscape(i.date)}</p>`;
+  if (i.tags?.length) h += `<p class="tags">Tags: ${i.tags.map(reportEscape).join(', ')}</p>`;
+  h += `<div class="insight-body">${i.body || '<em class="muted">(empty)</em>'}</div>`;
+  return h;
+}
+
+const REPORT_SECTIONS = [
+  { store: 'processes',      heading: 'Processes',         render: reportProcessHtml,   async: true },
+  { store: 'checklists',     heading: 'Checklists',        render: reportChecklistHtml, async: false },
+  { store: 'emailTemplates', heading: 'Email Templates',   render: reportTemplateHtml,  async: false },
+  { store: 'insights',       heading: 'Insights & Performance', render: reportInsightHtml, async: false }
+];
+
+// Build the inner report HTML (no <html> wrapper) for the chosen stores.
+async function buildReportBody(selectedStores) {
+  const folderMap = await reportFolderMap();
+  let body = '';
+  let total = 0;
+  for (const sec of REPORT_SECTIONS) {
+    if (!selectedStores.includes(sec.store)) continue;
+    let items = (await db.getAll(sec.store)).filter(x => !x.deleted);
+    if (!items.length) continue;
+    // Sort by folder then title for a readable order.
+    items.sort((a, b) =>
+      (folderMap[a.folderId] || '').localeCompare(folderMap[b.folderId] || '') ||
+      (a.title || '').localeCompare(b.title || ''));
+    body += `<section class="report-section"><h2>${reportEscape(sec.heading)} <span class="count">(${items.length})</span></h2>`;
+    let currentFolder = null;
+    for (const it of items) {
+      const fname = folderMap[it.folderId] || 'Uncategorized';
+      if (fname !== currentFolder) {
+        currentFolder = fname;
+        body += `<div class="folder-label">${reportEscape(fname)}</div>`;
+      }
+      const html = sec.async ? await sec.render(it) : sec.render(it);
+      body += `<article class="report-item">${html}</article>`;
+      total++;
+    }
+    body += `</section>`;
+  }
+  if (!total) body = `<p class="muted">No content to report for the selected types.</p>`;
+  return body;
+}
+
+// CSS shared by both HTML and Word output. Inline so the file is self-contained.
+function reportCss() {
+  return `
+    body { font-family: Calibri, Arial, sans-serif; color: #1a1a1a; line-height: 1.5; max-width: 820px; margin: 24px auto; padding: 0 24px; }
+    h1 { font-size: 24pt; margin: 0 0 4px; }
+    .report-meta { color: #666; font-size: 10pt; margin: 0 0 24px; border-bottom: 2px solid #6366f1; padding-bottom: 12px; }
+    h2 { font-size: 16pt; color: #4338ca; margin: 28px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    h2 .count { color: #999; font-size: 11pt; font-weight: normal; }
+    h3 { font-size: 13pt; margin: 16px 0 4px; }
+    .folder-label { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.08em; color: #6366f1; margin: 18px 0 4px; font-weight: bold; }
+    .report-item { margin: 0 0 14px; padding: 0 0 4px; }
+    .muted { color: #777; }
+    .tags { color: #888; font-size: 9.5pt; font-style: italic; }
+    .status { color: #b45309; font-size: 9.5pt; }
+    ol.steps > li { margin: 0 0 8px; }
+    .step-desc, .tpl-body, .insight-body { margin: 4px 0; }
+    ul.substeps { margin: 4px 0; }
+    ul.checklist { list-style: none; padding-left: 0; }
+    ul.checklist .box { font-size: 12pt; margin-right: 6px; }
+    .notes { font-size: 9.5pt; color: #555; margin: 4px 0; }
+    a { color: #4338ca; }
+  `;
+}
+
+async function generateReport(selectedStores, format) {
+  if (!selectedStores.length) { toast('Select at least one type'); return; }
+  const body = await buildReportBody(selectedStores);
+  const generated = formatFull(now());
+  const title = 'ProcDocs Report';
+  const docHtml =
+`<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<title>${reportEscape(title)}</title>
+<style>${reportCss()}</style>
+</head>
+<body>
+<h1>${reportEscape(title)}</h1>
+<div class="report-meta">Generated ${reportEscape(generated)} · ProcDocs v${reportEscape(APP_VERSION)}</div>
+${body}
+</body>
+</html>`;
+  const stamp = new Date().toISOString().slice(0,10);
+  if (format === 'doc') {
+    // .doc with Word MIME → opens as a fully editable Word/Google Docs file.
+    downloadFile(`procdocs-report-${stamp}.doc`, docHtml, 'application/msword');
+    toast('Editable report downloaded', 'success');
+  } else {
+    downloadFile(`procdocs-report-${stamp}.html`, docHtml, 'text/html');
+    toast('HTML report downloaded', 'success');
+  }
 }
 
 /* ---------- Folder-scoped export/import ---------- */
@@ -3097,6 +3285,13 @@ $('#wipeAllBtn').onclick = () => {
   });
 };
 $('#linkGraphBtn').onclick = openLinkGraph;
+
+function selectedReportStores() {
+  return Array.from($('#reportTypes').querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb => cb.value);
+}
+$('#reportHtmlBtn').onclick = () => generateReport(selectedReportStores(), 'html');
+$('#reportDocBtn').onclick = () => generateReport(selectedReportStores(), 'doc');
 
 async function openLinkGraph() {
   $('#linkGraphModal').hidden = false;
